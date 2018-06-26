@@ -32,6 +32,10 @@
 //                Pass package parameters as default args instead of using    //
 //                them directly, improves compatibility with tools like       //  
 //                Synopsys Spyglass and DC (GitHub #7) - Torbjørn Viem Ness   //
+//                                                                            //
+//                26/06/2018                                                  //
+//                Updated ready and valid signals to be set like in the larger//
+//                fpu_private variant - Torbjørn Viem Ness                    //
 ////////////////////////////////////////////////////////////////////////////////
 
 import fpu_defs::*;
@@ -54,63 +58,15 @@ module riscv_fpu
    input logic [C_CMD-1:0] operator_i,
    input logic             enable_i,
 
-   input logic             stall_i,
+   input logic             stall_i, // Currently does nothing, the fpu_core module is single-cycle anyway. Left in order to not break depending modules
 
    output logic [C_OP-1:0] result_o,
    //Output-Flags
    output logic            fpu_ready_o,   // high if fpu is ready
    output logic            result_valid_o // result is valid
    );
-
-
-   // Number of cycles the fpu needs, after two cycles the output is valid
-   localparam CYCLES = 2;
-
-   //Internal Operands
-   logic [C_OP-1:0]             operand_a_q;
-   logic [C_OP-1:0]             operand_b_q;
-
-   logic [C_RM-1:0]             rounding_mode_q;
-   logic [C_CMD-1:0]            operator_q;
-
-   logic [$clog2(CYCLES):0]     valid_count_q, valid_count_n;
-
-   // result is valid if we waited 2 cycles
-   assign result_valid_o = (valid_count_q == CYCLES - 1) ? 1'b1 : 1'b0;
-
-   // combinatorial update logic - set output bit accordingly
-   always_comb
-   begin
-      valid_count_n = valid_count_q;
-      fpu_ready_o = 1'b1;
-
-      if (enable_i)
-      begin
-          valid_count_n = valid_count_q + 1;
-          fpu_ready_o = 1'b0;
-          // if we already waited 2 cycles set the output to valid, fpu is ready
-          if (valid_count_q == CYCLES - 1)
-          begin
-            fpu_ready_o = 1'b1;
-            valid_count_n = 2'd0;
-          end
-      end
-   end
-
-   always_ff @(posedge clk, negedge rst_n)
-    begin
-      if (~rst_n)
-      begin
-        valid_count_q <= 1'b0;
-      end
-      else
-      begin
-        if (enable_i && ~stall_i)
-        begin
-          valid_count_q <= valid_count_n;
-        end
-      end
-    end
+   
+   assign fpu_ready_o = (!enable_i || result_valid_o);
 
    /////////////////////////////////////////////////////////////////////////////
    // FPU_core                                                                //
@@ -128,6 +84,7 @@ module riscv_fpu
       .OP_SI         ( operator_i       ),
 
       .Result_DO     ( result_o         ),
+      .Valid_SO      ( result_valid_o   ),
 
       .OF_SO         (                  ),
       .UF_SO         (                  ),
